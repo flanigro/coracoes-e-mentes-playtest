@@ -339,6 +339,19 @@ h1,h2,.score-row dt,.hand-action-bar button,.confirm-move { font-family: var(--f
 .history-jump:hover:not(:disabled) { background: var(--board-toggle-bg); }
 .cell.history-spotlight { outline: 5px solid var(--selection-color); outline-offset: 2px; box-shadow: 0 0 0 8px #ffdb004d, 0 0 22px 8px #ffdb0099; z-index: 5; }
 .cell.drop-hover { outline: 5px solid var(--selection-color); outline-offset: 2px; background: var(--board-toggle-bg); }
+.cell.pending-preview { outline: 4px solid var(--selection-color); outline-offset: 2px; box-shadow: var(--selection-glow); }
+.board-inline-action { position: absolute; z-index: 7; top: 2px; right: 3px; min-height: 20px; padding: 0 5px; border: 2px solid var(--ink); border-radius: 4px; background: var(--selection-color); color: var(--ink); font: 700 .7rem/1 var(--font-display); box-shadow: var(--card-shadow); white-space: nowrap; }
+.board-inline-action:hover,.board-inline-action:focus-visible { box-shadow: var(--selection-glow); }
+.cell-slot:has(.board-inline-action) .conversion-label { display: none; }
+.conversion-animation { position: absolute; inset: 0; z-index: 6; pointer-events: none; perspective: 600px; }
+.conversion-animation > div { position: absolute; inset: 0; backface-visibility: hidden; }
+.conversion-animation .card { height: 100%; }
+.conversion-before { animation: conversion-out .32s ease-in forwards; }
+.conversion-after { transform: rotateY(-90deg); animation: conversion-in .32s .32s ease-out forwards; }
+@keyframes conversion-out { to { transform: rotateY(90deg); } }
+@keyframes conversion-in { to { transform: rotateY(0deg); } }
+.cell-slot.conversion-finished { outline: 3px solid var(--selection-color); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .conversion-animation { display: none; } }
 .setup-mode-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--space-2); }
 .setup-modes { min-width: 0; margin: 0; padding: 0; border: 0; }
 .setup-modes legend { margin-bottom: var(--space-1); font-size: var(--text-sm); }
@@ -2337,7 +2350,7 @@ const STORAGE_KEY='CM-40-playtest-v1';
 let session=new GameSession(engine,{type:'normal',seed:'CM-40-001',config:{}});
 let setupPending=true;
 let selection={source:null,cardId:null,position:null,target:null,mode:'normal'};
-let draggedCard=null,dragHover=null,pointerDrag=null;
+let draggedCard=null,dragHover=null,pointerDrag=null,droppedPreview=false;
 let message='Dados validados. Escolha a carta A ou B que terá sua cor.', errorMessage=false;
 let openingChoice=null;
 let showBacks=false;
@@ -2388,18 +2401,20 @@ function computerPanel(){
  const lastMove=last?`<p class="computer-last-move"><b>Última jogada:</b> colocou ${idText(last.carta)} em ${esc(last.casa)}${last.conversoes.length?`; converteu ${last.conversoes.map(c=>`${idText(c.id)} em ${c.casa}`).join(', ')}`:''}.</p>`:'';
  return `<section class="panel stack computer-panel"><h2>Computador · ${session.setup.difficulty==='beginner'?'Iniciante':'Experiente'}</h2><p>${isBotTurn()?(aiPaused?'Computador pausado.':'Computador pensando…'):'Você controla '+name(COLORS.find(c=>session.controller(c)==='human'))+'.'}</p>${lastMove}${aiFailure?`<p class="message error">${esc(aiFailure)}</p>`:''}${isBotTurn()?`<button data-action="${aiPaused?'ai-resume':'ai-pause'}">${aiPaused?'Continuar computador':'Pausar computador'}</button>`:''}<button data-action="manual-control">Continuar com dois jogadores manuais</button>${isLaboratory&&report?`<details><summary>Por que o computador jogou assim?</summary><p>${esc(report.reason)}</p><p>${report.candidates} escolhas legais; ${report.replies} respostas examinadas.</p><small>${esc(report.information)}</small><ol>${report.alternatives.map(a=>`<li>${a.action.type==='opening'?'Topo '+name(a.action.topColor):idText(a.action.cardId)+' → '+coordinate(a.action.position)+(a.action.target===undefined?'':' · converte '+coordinate(a.action.target))} · avaliação ${a.value}</li>`).join('')}</ol></details>`:''}</section>`;
 }
-function resetSelection() { openingChoice=null;selection={source:null,cardId:null,position:null,target:null,mode:'normal'}; }
+function resetSelection() { openingChoice=null;droppedPreview=false;selection={source:null,cardId:null,position:null,target:null,mode:'normal'}; }
 function persist() { try { localStorage.setItem(STORAGE_KEY,session.serialize()); } catch { storageAvailable=false; } }
 function notify(text,error=false) { message=text; errorMessage=error; }
 function actionFromSelection() { return {type:'move',source:selection.source,cardId:selection.cardId,position:selection.position,mode:selection.mode,...(selection.mode!=='normal'?{target:selection.target}:{})}; }
-function commit(action,report=null) { try { session.dispatch(action,report); resetSelection(); const log=session.state.history.at(-1); notify(log.motivo+(log.combos_ativados.length?` Ativou ${log.combos_ativados.join(', ')}.`:'')+(log.combos_desfeitos.length?` Desfez ${log.combos_desfeitos.join(', ')}.`:'')); persist(); render(); } catch(error) { notify(error.message,true); render(); } }
+function commit(action,report=null) { try { const converted=action.mode==='converter'?session.state.board[action.target]:null;session.dispatch(action,report); resetSelection(); const log=session.state.history.at(-1); notify(log.motivo+(log.combos_ativados.length?` Ativou ${log.combos_ativados.join(', ')}.`:'')+(log.combos_desfeitos.length?` Desfez ${log.combos_desfeitos.join(', ')}.`:'')); persist(); render(); if(converted)animateConversion(action.target,converted); } catch(error) { notify(error.message,true); render(); } }
 function turnPrompt() {
   if(session.state.phase==='finalizada') return 'Partida finalizada';
   if(isBotTurn()) return aiPaused?'Computador pausado.':'Computador pensando…';
   if(session.state.phase==='abertura') return 'Escolha a carta A ou B que terá sua cor';
-  if(!selection.cardId) return 'Escolha uma carta';
-  if(selection.position===null) return 'Escolha uma casa livre';
+  if(!selection.cardId) return 'Escolha ou arraste uma carta';
+  if(selection.position===null) return 'Escolha uma casa ou arraste a carta';
+  if(droppedPreview&&selection.mode==='normal') return previewConversionTargets().length?'OK para colocar ou CONVERTER outra carta':'OK na carta para colocar';
   if(selection.mode!=='normal'&&selection.target===null) return 'Escolha a carta a ser convertida';
+  if(droppedPreview&&selection.mode==='converter') return 'OK na carta escolhida para converter';
   return 'Clique em OK para finalizar a jogada';
 }
 function hand(color) {
@@ -2415,14 +2430,38 @@ function available(position) {
 function conversionTargets() {
   return selection.mode==='converter'&&selection.source==='mao'?engine.conversionOptions(session.state,selection):[];
 }
+function previewConversionTargets() {
+  return droppedPreview&&selection.source==='mao'&&selection.position!==null
+    ?engine.conversionOptions(session.state,selection).filter(target=>target.ok):[];
+}
 function conversionPreview() {
   if(selection.mode!=='converter'||!selection.cardId||selection.position===null) return '';
   const targets=conversionTargets(), possible=targets.filter(t=>t.ok);
   return `<div class="conversion-preview" aria-live="polite"><b>${possible.length?`${possible.length} alvo(s) possível(is)`:'Nenhum alvo com custo completo'}</b>${targets.length?`<ul>${targets.map(t=>`<li><b>${idText(t.id)} · ${coordinate(t.target)}</b>: ${t.ok?`pode converter · ${t.required} cartas de apoio` : esc(t.reason)}</li>`).join('')}</ul>`:'<p>Não há cartas adversárias adjacentes à casa escolhida. Escolha outra casa.</p>'}</div>`;
 }
 function boardMarkup() {
-  const state=session.state, combos=engine.activeCombos(state), targets=conversionTargets();
-  return `<section class="panel"><div class="panel-title board-heading"><h2>Tabuleiro <span class="badge">4 × 6</span></h2><div class="board-toolbar"><button data-action="toggle-chains" aria-pressed="${showChains}">${showChains?'Ocultar ligações':'Mostrar ligações'}</button><button data-action="toggle-vignettes" aria-pressed="${showVignettes}">${showVignettes?'Ocultar vinhetas':'Mostrar vinhetas'}</button><button data-action="toggle-backs" aria-pressed="${showBacks}">${showBacks?'Ocultar ícones adversário':'Mostrar ícones adversário'}</button></div><small>${state.board.filter(Boolean).length} / 24 casas</small></div><div class="board-wrap"><div class="board" role="group" aria-label="Tabuleiro de quatro linhas e seis colunas">${state.board.map((cell,i)=>`<div class="cell-slot ${targets.find(t=>t.target===i)?.ok?'has-conversion':''}"><button data-cell="${i}" class="cell ${cell?'occupied':'empty'} ${!cell&&available(i)?'available':''} ${selection.position===i?'destination':''} ${selection.target===i?'target':''} ${targets.find(t=>t.target===i)?.ok?'convertible':targets.some(t=>t.target===i)?'conversion-blocked':''}" title="${esc(targets.find(t=>t.target===i)?.reason||'')}" aria-label="${coordinate(i)}${cell?`, carta ${cell.id}, ${name(cell.color)}`:', vazia'}${targets.find(t=>t.target===i)?.ok?', conversão possível':''}" aria-pressed="${selection.position===i||selection.target===i}">${cell?card({id:cell.id,color:cell.color,variant:'board',activeCombo:combos.find(c=>c.positions.includes(i))?.code}):`<span>${coordinate(i)}<br>＋</span>`}</button>${cell?zoomButton(cell.id,cell.color):''}${targets.find(t=>t.target===i)?.ok?'<span class="conversion-label">CONVERTER</span>':''}</div>`).join('')}</div></div></section>`;
+  const state=session.state,combos=engine.activeCombos(state),targets=droppedPreview?previewConversionTargets():conversionTargets();
+  const cells=state.board.map((cell,i)=>{
+    const target=targets.find(option=>option.target===i),preview=droppedPreview&&!cell&&selection.position===i;
+    const ready=preview&&selection.mode==='normal'&&engine.legal(state,actionFromSelection()).ok;
+    const targetButton=droppedPreview&&target
+      ?`<button type="button" class="board-inline-action ${selection.target===i?'confirm-target':'convert-target'}" data-preview-${selection.target===i?'confirm':'convert'}="${i}" aria-label="${selection.target===i?`OK — converter carta ${target.id}`:`Converter carta ${target.id}`}">${selection.target===i?'OK ✓':'CONVERTER'}</button>`
+      :target?'<span class="conversion-label">CONVERTER</span>':'';
+    return `<div class="cell-slot ${target?'has-conversion':''} ${preview?'has-preview':''}" data-position="${i}"><button data-cell="${i}" class="cell ${cell?'occupied':'empty'} ${!cell&&available(i)?'available':''} ${selection.position===i?'destination':''} ${selection.target===i?'target':''} ${target?'convertible':''} ${preview?'pending-preview':''}" title="${esc(target?.reason||'')}" aria-label="${coordinate(i)}${cell?`, carta ${cell.id}, ${name(cell.color)}`:preview?`, prévia da carta ${selection.cardId}`:', vazia'}${target?', conversão possível':''}" aria-pressed="${selection.position===i||selection.target===i}">${cell?card({id:cell.id,color:cell.color,variant:'board',activeCombo:combos.find(c=>c.positions.includes(i))?.code}):preview?card({id:selection.cardId,color:state.current,variant:'board'}):`<span>${coordinate(i)}<br>＋</span>`}</button>${cell?zoomButton(cell.id,cell.color):''}${ready?'<button type="button" class="board-inline-action confirm-placement" data-action="play" aria-label="OK — colocar carta nesta casa">OK ✓</button>':''}${targetButton}</div>`;
+  }).join('');
+  return `<section class="panel"><div class="panel-title board-heading"><h2>Tabuleiro <span class="badge">4 × 6</span></h2><div class="board-toolbar"><button data-action="toggle-chains" aria-pressed="${showChains}">${showChains?'Ocultar ligações':'Mostrar ligações'}</button><button data-action="toggle-vignettes" aria-pressed="${showVignettes}">${showVignettes?'Ocultar vinhetas':'Mostrar vinhetas'}</button><button data-action="toggle-backs" aria-pressed="${showBacks}">${showBacks?'Ocultar ícones adversário':'Mostrar ícones adversário'}</button></div><small>${state.board.filter(Boolean).length} / 24 casas</small></div><div class="board-wrap"><div class="board" role="group" aria-label="Tabuleiro de quatro linhas e seis colunas">${cells}</div></div></section>`;
+}
+function animateConversion(position,previous) {
+  if(typeof document.createElement!=='function')return;
+  const slot=root.querySelector(`.board .cell-slot[data-position="${position}"]`);
+  if(!slot)return;
+  const current=session.state.board[position],overlay=document.createElement('div');
+  overlay.className='conversion-animation';
+  overlay.setAttribute('aria-hidden','true');
+  overlay.innerHTML=`<div class="conversion-before">${card({id:previous.id,color:previous.color,variant:'board'})}</div><div class="conversion-after">${card({id:current.id,color:current.color,variant:'board'})}</div>`;
+  slot.append(overlay);slot.classList.add('conversion-finished');
+  setTimeout(()=>overlay.remove(),720);
+  setTimeout(()=>slot.classList.remove('conversion-finished'),1300);
 }
 function actionPanel() {
   const state=session.state;
@@ -2457,7 +2496,9 @@ function handActions() {
     const targets=conversionTargets().filter(t=>t.ok);
     hint=selection.target!==null?`Converter ${idText(session.state.board[selection.target].id)} em ${coordinate(selection.target)}.`:targets.length>1?'Escolha a carta a ser convertida entre as opções amarelas.':'Nenhuma conversão legal nesta casa. Escolha outra casa livre.';
   } else if(selection.mode==='converter') hint='Escolha uma casa livre destacada. Os alvos serão marcados em amarelo.';
-  else if(selection.cardId) hint=selection.position===null?'':`Colocar ${idText(selection.cardId)} em ${coordinate(selection.position)}. Clique em OK para finalizar.`;
+  else if(selection.cardId) hint=selection.position===null?'':droppedPreview&&previewConversionTargets().length
+    ?`Prévia em ${coordinate(selection.position)}. OK coloca; CONVERTER escolhe uma carta adversária.`
+    :`Colocar ${idText(selection.cardId)} em ${coordinate(selection.position)}. Clique em OK para finalizar.`;
   return `<div class="hand-actions"><div class="hand-action-bar"><span class="turn-instruction" role="status" aria-live="polite">${esc(turnPrompt())}</span><div class="segmented" aria-label="Tipo de jogada"><button data-mode="normal" class="${selection.mode==='normal'?'active':''}" aria-pressed="${selection.mode==='normal'}" ${selection.cardId?'':'disabled'}>COLOCAR</button><span class="mode-or" aria-hidden="true">OU</span><button data-mode="converter" class="${selection.mode==='converter'?'active':''}" aria-pressed="${selection.mode==='converter'}" ${convertible?'':'disabled title="Não há conversão legal com esta carta."'}>COLOCAR E CONVERTER</button></div><button class="confirm-move" data-action="play" aria-label="OK — finalizar jogada" ${check?.ok?'':'disabled'}>OK <span aria-hidden="true">✓</span></button></div>${hint||selection.cardId||selection.position!==null?`<div class="hand-hint ${errorMessage||check&&!check.ok?'error':''}" role="status" aria-live="polite"><span>${esc(hint)}</span><button data-action="clear">Limpar seleção</button></div>`:''}</div>`;
 }
 function commonCard(color,current) {
@@ -2591,6 +2632,18 @@ root.addEventListener('click',async event=>{
   }
   if(button.dataset.zoomCard) { modal={type:'card',id:Number(button.dataset.zoomCard),color:viewerColor()}; render(); return; }
   if(isBotTurn()&&(button.dataset.select||button.dataset.top||button.dataset.mode||['play','opening'].includes(button.dataset.action)))return;
+  if(button.dataset.previewConvert!==undefined) {
+    const target=Number(button.dataset.previewConvert);
+    if(!previewConversionTargets().some(option=>option.target===target))return;
+    selection.mode='converter';selection.target=target;
+    notify(`Converter ${idText(session.state.board[target].id)}. Confirme em OK sobre a carta.`);render();return;
+  }
+  if(button.dataset.previewConfirm!==undefined) {
+    const target=Number(button.dataset.previewConfirm),action=actionFromSelection();
+    if(!droppedPreview||action.mode!=='converter'||action.target!==target)return;
+    const check=engine.legal(session.state,action);
+    if(check.ok)commit(action);else {notify(check.reason,true);render();}return;
+  }
   if(button.dataset.openingChoice!==undefined) {openingChoice=Number(button.dataset.openingChoice);render();return;}
   if(button.dataset.select) { selection.source='mao'; selection.cardId=Number(button.dataset.select); refreshConversionSelection(); notify('Carta selecionada.'); render(); return; }
   if(button.dataset.top) { selection.source='topo'; selection.cardId=session.state.deck[0]; if(selection.mode!=='normal') { selection.mode='normal'; selection.target=null; } notify('Carta comum selecionada. Colocação normal, sem alterar a mão.'); render(); return; }
@@ -2646,7 +2699,7 @@ function legalDrop(cell,card=draggedCard){
 function prepareDrop(card,cell){
   if(!legalDrop(cell,card))return false;
   selection={source:card.source,cardId:card.cardId,position:Number(cell.dataset.cell),target:null,mode:'normal'};
-  clearDragHover();notify('Carta e casa selecionadas. Escolha o tipo de jogada e confirme em OK.');render();return true;
+  droppedPreview=true;clearDragHover();notify('Carta preparada na casa. Confirme em OK ou escolha uma conversão disponível.');render();return true;
 }
 root.addEventListener('dragstart',event=>{
   const source=event.target.closest('button[data-select],button[data-top]');
