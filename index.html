@@ -17,7 +17,7 @@
   --radius: 8px; --card-radius: 9px; --border: 1px; --face-border: 2px; --hand-face-border: 3px; --hand-outer-border: 3px; --hand-panel-border: 3px; --combo-border: 6px; --focus-border: 3px;
   --hand-width: 168px; --cell-min: 124px; --cell-height: 144px; --sidebar-width: 296px; --page-width: 1500px;
   --card-expanded-width: 346px; --icon-height: 55px; --icon-hand-height: 49px;
-  --card-bar-height: 24px; --reading-title-height: 72px; --context-line-height: 1.4rem; --context-lines: 5; --text-min-scale: .75; --public-title-size: 1.3rem; --opponent-opacity: .5; --mini-vignette-height: 80px; --warning: #997024;
+  --card-bar-height: 24px; --reading-title-height: 72px; --context-line-height: 1.4rem; --context-lines: 5; --text-min-scale: .75; --public-title-size: 1.3rem; --opponent-opacity: .5; --mini-vignette-height: 80px; --opening-vignette-height: 55px; --opening-card-height: 235px; --warning: #997024;
   --mode-idle-border: #a8aaa5; --board-toggle-bg: #fff2b8;
   --chain-gap: 8px; --chain-width: 3px; --chain-dots: 1 7; --chain-saturation: 78%; --chain-lightness: 35%;
   --transition-duration: 120ms; --transition-easing: ease-out; --shadow: 0 8px 28px #26282218; --selection-color: #ffdf00; --selection-glow: 0 0 9px 3px #ffdf0080; --card-shadow: 2px 2px 0 #00000059;
@@ -305,7 +305,8 @@ h1,h2,.score-row dt,.hand-action-bar button,.confirm-move { font-family: var(--f
 .opening-option { position: relative; min-width: 0; }
 .opening-choice { width: 100%; padding: 3px; border: 3px solid transparent; background: transparent; }
 .opening-choice.selected { border-color: var(--selection-color); }
-.opening-choice .card { height: 195px; }
+.opening-choice .card { height: auto; min-height: calc(var(--opening-card-height) - var(--opening-vignette-height)); }
+.opening-choice .card-vignette { height: var(--opening-vignette-height); }
 .opening-choice>b { display: block; margin-bottom: 8px; font-family: var(--font-display); }
 .opening-option .zoom-button { top: 40px; }
 .opening-layout .sidebar { align-self: start; }
@@ -325,7 +326,7 @@ h1,h2,.score-row dt,.hand-action-bar button,.confirm-move { font-family: var(--f
 .opening-stage { position: relative; }
 .opening-cover { position: absolute; inset: 0; z-index: 5; display: flex; align-items: flex-start; justify-content: center; padding: var(--space-3); background: #00000018; }
 .opening-cover > .panel { width: min(510px,100%); box-shadow: 0 4px 18px #00000038; }
-.opening-cover .opening-choice .card { height: 205px; }
+.show-vignettes .opening-choice .card { min-height: var(--opening-card-height); }
 .computer-last-move { border-left: 3px solid var(--selection-color); padding-left: var(--space-2); }
 .board-toolbar { gap: var(--space-1); }
 .board-toolbar button { padding: 6px 8px; }
@@ -337,6 +338,7 @@ h1,h2,.score-row dt,.hand-action-bar button,.confirm-move { font-family: var(--f
 .history-jump { display: block; width: 100%; padding: 2px 0; border: 0; border-radius: 0; background: transparent; text-align: left; font-size: inherit; }
 .history-jump:hover:not(:disabled) { background: var(--board-toggle-bg); }
 .cell.history-spotlight { outline: 5px solid var(--selection-color); outline-offset: 2px; box-shadow: 0 0 0 8px #ffdb004d, 0 0 22px 8px #ffdb0099; z-index: 5; }
+.cell.drop-hover { outline: 5px solid var(--selection-color); outline-offset: 2px; background: var(--board-toggle-bg); }
 .setup-mode-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--space-2); }
 .setup-modes { min-width: 0; margin: 0; padding: 0; border: 0; }
 .setup-modes legend { margin-bottom: var(--space-1); font-size: var(--text-sm); }
@@ -2335,6 +2337,7 @@ const STORAGE_KEY='CM-40-playtest-v1';
 let session=new GameSession(engine,{type:'normal',seed:'CM-40-001',config:{}});
 let setupPending=true;
 let selection={source:null,cardId:null,position:null,target:null,mode:'normal'};
+let draggedCard=null,dragHover=null,pointerDrag=null;
 let message='Dados validados. Escolha a carta A ou B que terá sua cor.', errorMessage=false;
 let openingChoice=null;
 let showBacks=false;
@@ -2401,7 +2404,7 @@ function turnPrompt() {
 }
 function hand(color) {
   const state=session.state, current=state.current===color && ['abertura','jogando'].includes(state.phase);
-  return `<section class="panel hand-panel ${color} ${current?'current':''}" aria-label="Mão ${name(color)}"><div class="hand-topline"><h2 class="hand-caption">${color===viewerColor()?'CARTAS DA SUA MÃO':'CARTAS DA MÃO DO ADVERSÁRIO'}</h2>${current&&state.phase==='jogando'&&!isBotTurn()?handActions():`<div class="hand-idle">${state.current===color?esc(turnPrompt()):''}</div>`}${state.phase==='abertura'?'':`<h2 class="common-heading">CARTA COMUM</h2>`}</div><div class="hand">${state.hands[color].map(id=>`<div class="hand-entry"><button class="card-button ${selection.source==='mao'&&selection.cardId===id?'selected':''}" data-select="${id}" aria-label="Selecionar carta ${id} da mão ${name(color)}" ${current&&state.phase==='jogando'&&!isBotTurn()?'':'disabled'}>${card({id,color,variant:'hand',showBack:showBacks})}</button>${zoomButton(id)}</div>`).join('')||'<p class="muted">Mão vazia. Continue jogando com a carta comum.</p>'}${state.phase==='abertura'?'':commonCard(color,current)}</div></section>`;
+  return `<section class="panel hand-panel ${color} ${current?'current':''}" aria-label="Mão ${name(color)}"><div class="hand-topline"><h2 class="hand-caption">${color===viewerColor()?'CARTAS DA SUA MÃO':'CARTAS DA MÃO DO ADVERSÁRIO'}</h2>${current&&state.phase==='jogando'&&!isBotTurn()?handActions():`<div class="hand-idle">${state.current===color?esc(turnPrompt()):''}</div>`}${state.phase==='abertura'?'':`<h2 class="common-heading">CARTA COMUM</h2>`}</div><div class="hand">${state.hands[color].map(id=>`<div class="hand-entry"><button class="card-button ${selection.source==='mao'&&selection.cardId===id?'selected':''}" data-select="${id}" draggable="${current&&state.phase==='jogando'&&!isBotTurn()}" aria-label="Selecionar carta ${id} da mão ${name(color)}" ${current&&state.phase==='jogando'&&!isBotTurn()?'':'disabled'}>${card({id,color,variant:'hand',showBack:showBacks})}</button>${zoomButton(id)}</div>`).join('')||'<p class="muted">Mão vazia. Continue jogando com a carta comum.</p>'}${state.phase==='abertura'?'':commonCard(color,current)}</div></section>`;
 }
 function available(position) {
   if(!selection.cardId||session.state.phase!=='jogando') return false;
@@ -2459,7 +2462,7 @@ function handActions() {
 }
 function commonCard(color,current) {
  const state=session.state;
- return `<div class="common-entry">${state.deck.length?`<div class="hand-entry"><button class="card-button ${selection.source==='topo'&&current?'selected':''}" data-top="true" ${current&&!isBotTurn()?'':'disabled'} aria-label="Selecionar carta comum">${card({id:state.deck[0],color,variant:'hand',showBack:false})}</button>${zoomButton(state.deck[0],color)}</div>`:'<p>Monte vazio.</p>'}<small>Não pode ser usada para conversão</small></div>`;
+ return `<div class="common-entry">${state.deck.length?`<div class="hand-entry"><button class="card-button ${selection.source==='topo'&&current?'selected':''}" data-top="true" draggable="${current&&state.phase==='jogando'&&!isBotTurn()}" ${current&&!isBotTurn()?'':'disabled'} aria-label="Selecionar carta comum">${card({id:state.deck[0],color,variant:'hand',showBack:false})}</button>${zoomButton(state.deck[0],color)}</div>`:'<p>Monte vazio.</p>'}<small>Não pode ser usada para conversão</small></div>`;
 }
 function symbolBreakdown(score) {
   if (!score.symbolBonus) return '<b>0</b>';
@@ -2635,6 +2638,47 @@ root.addEventListener('click',async event=>{
     case 'demo-next': commit(DEMO_ACTIONS[session.cursor]); break;
   }
 });
+function clearDragHover(){dragHover?.classList.remove('drop-hover');dragHover=null;}
+function legalDrop(cell,card=draggedCard){
+  if(!card||!cell||!cell.classList.contains('empty'))return false;
+  return engine.legal(session.state,{type:'move',source:card.source,cardId:card.cardId,position:Number(cell.dataset.cell),mode:'normal'}).ok;
+}
+function prepareDrop(card,cell){
+  if(!legalDrop(cell,card))return false;
+  selection={source:card.source,cardId:card.cardId,position:Number(cell.dataset.cell),target:null,mode:'normal'};
+  clearDragHover();notify('Carta e casa selecionadas. Escolha o tipo de jogada e confirme em OK.');render();return true;
+}
+root.addEventListener('dragstart',event=>{
+  const source=event.target.closest('button[data-select],button[data-top]');
+  if(!source||source.disabled||session.state.phase!=='jogando'||isBotTurn()){event.preventDefault();return;}
+  draggedCard={source:source.dataset.top?'topo':'mao',cardId:source.dataset.top?session.state.deck[0]:Number(source.dataset.select)};
+  event.dataTransfer.effectAllowed='copy';event.dataTransfer.setData('text/plain',String(draggedCard.cardId));
+});
+root.addEventListener('dragover',event=>{
+  const cell=event.target.closest('[data-cell]');
+  if(!legalDrop(cell)){clearDragHover();return;}
+  event.preventDefault();event.dataTransfer.dropEffect='copy';
+  if(dragHover!==cell){clearDragHover();dragHover=cell;cell.classList.add('drop-hover');}
+});
+root.addEventListener('drop',event=>{
+  const cell=event.target.closest('[data-cell]');
+  if(!legalDrop(cell)){clearDragHover();draggedCard=null;return;}
+  event.preventDefault();
+  const card=draggedCard;draggedCard=null;prepareDrop(card,cell);
+});
+root.addEventListener('dragend',()=>{clearDragHover();draggedCard=null;});
+root.addEventListener('pointerdown',event=>{
+  const source=event.target.closest('button[data-select],button[data-top]');
+  if(!source||source.disabled||session.state.phase!=='jogando'||isBotTurn())return;
+  pointerDrag={source:source.dataset.top?'topo':'mao',cardId:source.dataset.top?session.state.deck[0]:Number(source.dataset.select),x:event.clientX,y:event.clientY};
+});
+root.addEventListener('pointerup',event=>{
+  const card=pointerDrag;pointerDrag=null;
+  if(!card||Math.hypot(event.clientX-card.x,event.clientY-card.y)<24)return;
+  const cell=(document.elementFromPoint?.(event.clientX,event.clientY)||event.target).closest?.('[data-cell]');
+  prepareDrop(card,cell);
+});
+root.addEventListener('pointercancel',()=>{pointerDrag=null;});
 root.addEventListener('input',event=>{ if(event.target.id==='notes') { session.notes=event.target.value; persist(); } });
 root.addEventListener('change',async event=>{
   if(['opponent','humanColor'].includes(event.target.name)) {updateSetupForm(event.target.form);return;}
