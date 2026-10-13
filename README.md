@@ -8,7 +8,7 @@ Abra o site e escolha computador ou dois humanos. Contra o computador, escolha s
 
 Na primeira jogada de cada jogador não pode haver conversão. A carta colocada só pode converter um alvo com pelo menos um símbolo em comum com sua face visível. Consulte as regras completas pelo botão Regras no jogo.
 
-Salvar arquivo e Carregar transportam partidas entre navegadores. O salvamento automático fica apenas no navegador. Não há envio automático de partidas ou devolutivas, nem jogo remoto entre computadores. Para compartilhar resultados, envie manualmente o arquivo salvo ao organizador.
+Salvar arquivo e Exportar permitem escolher, no Chrome, a pasta local **playtests online** para guardar os arquivos JSON. O navegador solicita essa escolha na primeira gravação de cada visita. Nos navegadores sem seletor de pasta, o arquivo é baixado para a pasta de downloads configurada. Carregar transporta partidas entre navegadores. O salvamento automático fica apenas no navegador. Não há envio automático de partidas ou devolutivas, nem jogo remoto entre computadores. Para compartilhar resultados, envie manualmente o arquivo salvo ao organizador.
 
 O HTML inclui o motor, dados, fontes e imagens; também pode ser baixado e aberto localmente. Este repositório contém a edição de publicação; o laboratório e as fontes de desenvolvimento são mantidos separadamente.
 
