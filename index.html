@@ -338,6 +338,8 @@ h1,h2,.score-row dt,.hand-action-bar button,.confirm-move { font-family: var(--f
 .history-jump:hover:not(:disabled) { background: var(--board-toggle-bg); }
 .cell.history-spotlight { outline: 5px solid var(--selection-color); outline-offset: 2px; box-shadow: 0 0 0 8px #ffdb004d, 0 0 22px 8px #ffdb0099; z-index: 5; }
 .setup-mode-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--space-2); }
+.setup-modes { min-width: 0; margin: 0; padding: 0; border: 0; }
+.setup-modes legend { margin-bottom: var(--space-1); font-size: var(--text-sm); }
 .setup-mode-option { position: relative; display: block; }
 .setup-mode-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .setup-mode-option span { display: grid; place-items: center; min-height: 56px; padding: 8px; border: 3px solid var(--line); border-radius: var(--radius); text-align: center; font: 700 .95rem/1.15 var(--font-display); cursor: pointer; }
