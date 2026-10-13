@@ -340,7 +340,8 @@ h1,h2,.score-row dt,.hand-action-bar button,.confirm-move { font-family: var(--f
 .cell.history-spotlight { outline: 5px solid var(--selection-color); outline-offset: 2px; box-shadow: 0 0 0 8px #ffdb004d, 0 0 22px 8px #ffdb0099; z-index: 5; }
 .cell.drop-hover { outline: 5px solid var(--selection-color); outline-offset: 2px; background: var(--board-toggle-bg); }
 .cell.pending-preview { outline: 4px solid var(--selection-color); outline-offset: 2px; box-shadow: var(--selection-glow); }
-.board-inline-action { position: absolute; z-index: 7; top: 2px; right: 3px; min-height: 20px; padding: 0 5px; border: 2px solid var(--ink); border-radius: 4px; background: var(--selection-color); color: var(--ink); font: 700 .7rem/1 var(--font-display); box-shadow: var(--card-shadow); white-space: nowrap; }
+.board-inline-action { position: absolute; z-index: 7; top: 50%; left: 50%; transform: translate(-50%,-50%); min-width: 53px; min-height: 34px; padding: 3px 8px; border: 2px solid var(--ink); border-radius: var(--radius); background: var(--selection-color); color: var(--ink); font: 700 .95rem/1 var(--font-display); box-shadow: var(--card-shadow); white-space: nowrap; }
+.board-inline-action.convert-target { font-size: .8rem; }
 .board-inline-action:hover,.board-inline-action:focus-visible { box-shadow: var(--selection-glow); }
 .cell-slot:has(.board-inline-action) .conversion-label { display: none; }
 .conversion-animation { position: absolute; inset: 0; z-index: 6; pointer-events: none; perspective: 600px; }
@@ -377,6 +378,8 @@ h1,h2,.score-row dt,.hand-action-bar button,.confirm-move { font-family: var(--f
 .hand-topline .segmented button { min-height: 34px; padding: 3px 7px; font-size: .75rem; white-space: nowrap; }
 .hand-topline .mode-or { color: white; font-size: .68rem; font-weight: 800; }
 .hand-topline .confirm-move { min-width: 53px; min-height: 34px; padding: 3px 8px; font-size: .95rem; white-space: nowrap; }
+.hand-topline .clear-move { flex: none; min-height: 34px; padding: 3px 8px; font-size: .72rem; white-space: nowrap; }
+.hand-topline .clear-move:disabled { opacity: .55; }
 .hand-topline .hand-hint { grid-column: 1 / -1; grid-row: 2; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin: 0; }
 .hand-topline .hand-hint button { flex: none; padding: 2px 7px; font-size: .7rem; }
 .hand-topline .hand-idle { grid-column: 2; grid-row: 1; margin: 0; }
@@ -2412,10 +2415,10 @@ function turnPrompt() {
   if(session.state.phase==='abertura') return 'Escolha a carta A ou B que terá sua cor';
   if(!selection.cardId) return 'Escolha ou arraste uma carta';
   if(selection.position===null) return 'Escolha uma casa ou arraste a carta';
-  if(droppedPreview&&selection.mode==='normal') return previewConversionTargets().length?'OK para colocar ou CONVERTER outra carta':'OK na carta para colocar';
+  if(droppedPreview&&selection.mode==='normal') return 'Clique em OK para finalizar';
   if(selection.mode!=='normal'&&selection.target===null) return 'Escolha a carta a ser convertida';
-  if(droppedPreview&&selection.mode==='converter') return 'OK na carta escolhida para converter';
-  return 'Clique em OK para finalizar a jogada';
+  if(droppedPreview&&selection.mode==='converter') return 'Clique em OK para finalizar';
+  return 'Clique em OK para finalizar';
 }
 function hand(color) {
   const state=session.state, current=state.current===color && ['abertura','jogando'].includes(state.phase);
@@ -2492,14 +2495,13 @@ function handActions() {
   let hint='';
   if(errorMessage) hint=message;
   else if(check&&!check.ok) hint=check.reason;
+  else if(check?.ok) hint='';
   else if(selection.mode==='converter'&&selection.position!==null) {
     const targets=conversionTargets().filter(t=>t.ok);
     hint=selection.target!==null?`Converter ${idText(session.state.board[selection.target].id)} em ${coordinate(selection.target)}.`:targets.length>1?'Escolha a carta a ser convertida entre as opções amarelas.':'Nenhuma conversão legal nesta casa. Escolha outra casa livre.';
   } else if(selection.mode==='converter') hint='Escolha uma casa livre destacada. Os alvos serão marcados em amarelo.';
-  else if(selection.cardId) hint=selection.position===null?'':droppedPreview&&previewConversionTargets().length
-    ?`Prévia em ${coordinate(selection.position)}. OK coloca; CONVERTER escolhe uma carta adversária.`
-    :`Colocar ${idText(selection.cardId)} em ${coordinate(selection.position)}. Clique em OK para finalizar.`;
-  return `<div class="hand-actions"><div class="hand-action-bar"><span class="turn-instruction" role="status" aria-live="polite">${esc(turnPrompt())}</span><div class="segmented" aria-label="Tipo de jogada"><button data-mode="normal" class="${selection.mode==='normal'?'active':''}" aria-pressed="${selection.mode==='normal'}" ${selection.cardId?'':'disabled'}>COLOCAR</button><span class="mode-or" aria-hidden="true">OU</span><button data-mode="converter" class="${selection.mode==='converter'?'active':''}" aria-pressed="${selection.mode==='converter'}" ${convertible?'':'disabled title="Não há conversão legal com esta carta."'}>COLOCAR E CONVERTER</button></div><button class="confirm-move" data-action="play" aria-label="OK — finalizar jogada" ${check?.ok?'':'disabled'}>OK <span aria-hidden="true">✓</span></button></div>${hint||selection.cardId||selection.position!==null?`<div class="hand-hint ${errorMessage||check&&!check.ok?'error':''}" role="status" aria-live="polite"><span>${esc(hint)}</span><button data-action="clear">Limpar seleção</button></div>`:''}</div>`;
+  else if(selection.cardId&&selection.position!==null&&!droppedPreview) hint='';
+  return `<div class="hand-actions"><div class="hand-action-bar"><span class="turn-instruction" role="status" aria-live="polite">${esc(turnPrompt())}</span><div class="segmented" aria-label="Tipo de jogada"><button data-mode="normal" class="${selection.mode==='normal'?'active':''}" aria-pressed="${selection.mode==='normal'}" ${selection.cardId?'':'disabled'}>COLOCAR</button><span class="mode-or" aria-hidden="true">OU</span><button data-mode="converter" class="${selection.mode==='converter'?'active':''}" aria-pressed="${selection.mode==='converter'}" ${convertible?'':'disabled title="Não há conversão legal com esta carta."'}>COLOCAR E CONVERTER</button></div><button class="confirm-move" data-action="play" aria-label="OK — finalizar jogada" ${check?.ok?'':'disabled'}>OK <span aria-hidden="true">✓</span></button><button class="clear-move" data-action="clear" ${selection.cardId||selection.position!==null?'':'disabled'}>Limpar seleção</button></div>${hint?`<div class="hand-hint ${errorMessage||check&&!check.ok?'error':''}" role="status" aria-live="polite">${esc(hint)}</div>`:''}</div>`;
 }
 function commonCard(color,current) {
  const state=session.state;
