@@ -2599,7 +2599,7 @@ root.addEventListener('click',async event=>{
     case 'rules': modal={type:'rules'}; render(); break;
     case 'close': modal=null; render(); break;
     case 'inspect': modal={type:'card',id:selection.cardId,color:viewerColor()}; render(); break;
-    case 'export-log': await savePlaytestFile('CM-registro-playtest.json',JSON.stringify({regras:session.state.rulesVersion,atualizacao:session.migration,dados:session.state.dataVersion,setup:session.setup,anotacoes:session.notes,versoesPorJogada:session.commandRules,decisoesComputador:session.reports.slice(0,session.cursor),historico:session.state.history,pontuacao:engine.score(session.state)},null,2)); break;
+    case 'export-log': await savePlaytestFile(`CM-registro-playtest-${session.state.seed.replace(/[^a-z0-9_-]/gi,'_')}.json`,JSON.stringify({regras:session.state.rulesVersion,atualizacao:session.migration,dados:session.state.dataVersion,setup:session.setup,anotacoes:session.notes,versoesPorJogada:session.commandRules,decisoesComputador:session.reports.slice(0,session.cursor),historico:session.state.history,pontuacao:engine.score(session.state)},null,2)); break;
     case 'demo': modal={type:'demo-confirm'};render();break;
     case 'demo-confirm': modal=null;cancelComputer();aiPaused=false;aiFailure='';session=new GameSession(engine,{type:'demo'}); resetSelection(); notify('Cenário didático com seis cartas já no tabuleiro. Use Próximo passo para demonstrar as quatro ações.'); persist(); render(); break;
     case 'demo-next': commit(DEMO_ACTIONS[session.cursor]); break;
